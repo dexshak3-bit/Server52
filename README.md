@@ -309,3 +309,128 @@ JOIN clients c ON cs.case_number = c.case_number
 JOIN accusations a ON c.passport_number = a.client_passport 
 JOIN articles_criminal_code acc ON a.article_code = acc.article 
 ORDER BY cs.case_number, a.article_code;
+
+Настроим проект
+В Program.cs необходимо зарегистрировать контекст бд:
+builder.Services.AddDbContext<TradeContext>();
+Регистрируем класс TradeContext как сервис с областью действия Scoped.
+Scoped: Один экземпляр создаётся для каждого HTTP-запроса и используется в течение его обработки.
+Также поступим с другими классами, используемыми в HTTP-запросах:
+using Sieve.Services;
+using TradeProject.Classes;
+using TradeProject.Model;
+var builder = WebApplication.CreateBuilder(args);
+// Регистрация сервисов
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<ValidationHelper>();
+builder.Services.AddScoped<SieveProcessor>();
+builder.Services.AddDbContext<TradeContext>();
+var app = builder.Build();
+// Конфигурация middleware
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+app.Run();
+
+Узнать и изменить порт, по которому можно обратиться к API можно в файле launchSettings.json. (Properties – launchSettings.json)
+
+Контроллеры
+Контроллеры в ASP.NET Core используются для обработки HTTP-запросов и управления логикой приложения. Они принимают входящие запросы от клиента, выполняют нужные действия и возвращают результаты в виде ответов.
+Теперь создадим такой для product: новый файл ProductController.cs в папке Controllers.
+
+ Убираем метод Index. 
+После namespace добавляем атрибуты:
+[Route("api/[controller]")]: устанавливает базовый маршрут для контроллера, автоматически заменяя [controller] на имя контроллера без суффикса Controller (например, api/product для ProductController).
+[ApiController]: обозначает класс как API-контроллер, включая автоматическую валидацию модели и упрощенную маршрутизацию, что улучшает обработку запросов и ошибок.
+ Пропишем инъекцию зависимостей.
+
+hamespace TradeProject.Controllers
+{
+[Route("api/[controller]")]
+[ApiController]
+Ссылок: 1
+public class ProductController: Controller
+{
+private readonly ValidationHelper _validation;
+private readonly TradeContext _context;
+private readonly SieveProcessor sieveProcessor;
+Ссылок: 0
+public ProductController(TradeContext context, Validation Helper validation Helper, SieveProcessor sieveProcessor)
+{
+_validation validationHelper;
+_context context;
+_sieveProcessor = sieveProcessor;
+
+HTTP-запросы
+Вот краткое описание основных атрибутов для работы с HTTP-запросами в ASP.NET Core:
+⦁	[HttpGet]: обрабатывает HTTP GET-запросы (получение данных).
+⦁	[HttpPost]: обрабатывает HTTP POST-запросы (создание нового ресурса).
+⦁	[HttpPut]: обрабатывает HTTP PUT-запросы (обновление существующего ресурса).
+⦁	[HttpDelete]: обрабатывает HTTP DELETE-запросы (удаление ресурса).
+⦁	[HttpPatch]: обрабатывает HTTP PATCH-запросы (частичное обновление ресурса).
+⦁	[HttpHead]: обрабатывает HTTP HEAD-запросы (получение заголовков без тела ответа).
+⦁	[HttpOptions]: обрабатывает HTTP OPTIONS-запросы (получение поддерживаемых методов для ресурса).
+⦁	[HttpPut("{id}")]: используется для указания маршрута с параметрами (например, обновление ресурса с заданным id).
+⦁	[Route("path")]: устанавливает маршрут для контроллера или метода.
+⦁	[Authorize]: ограничивает доступ к методу или контроллеру только авторизованным пользователям.
+⦁	[AllowAnonymous]: разрешает доступ к методу или контроллеру для анонимных пользователей.
+⦁	[FromBody]: указывает, что параметр метода должен быть привязан из тела запроса.
+⦁	[FromQuery]: указывает, что параметр метода должен быть привязан из строки запроса (параметры URL).
+⦁	[FromRoute]: указывает, что параметр метода должен быть привязан из маршрута URL.
+⦁	[FromHeader]: указывает, что параметр метода должен быть привязан из заголовков запроса.
+⦁	[FromForm]: указывает, что параметр метода должен быть привязан из формы запроса.
+⦁	[FromServices]: внедряет зависимость в метод контроллера.
+Получив классы в папке Model из базы данных, на их основе, настоятельно рекомендуется, создать классы DTO для обмена данными в HTTP-запросах.
+DTO (Data Transfer Object) помогают упростить работу с API, обеспечивая:
+⦁	Изоляцию слоев: защита внутренней логики приложения.
+⦁	Оптимизацию данных: передача только нужных данных.
+⦁	Гибкость: поддержка изменений без затруднений.
+Также помогает избежать проблемы с рекурсией (самоссылками), при передаче данных, с внешними ссылками, ссылающихся друг на друга.
+Каждый метод, позволяющий связаться с ним, имеет атрибут [Http*действие*]
+Task<IActionResult>: Асинхронный метод, который возвращает объект типа IActionResult. Это позволяет возвращать различные результаты (например, Ok(), NotFound(), BadRequest()).
+HttpGet
+[HttpGet]
+public async Task<IActionResult> GetProducts([FromQuery] SieveModel sieveModel)
+{
+}
+.Include(p => p.ProductType)
+.Include(p => p.Supplier).AsQueryable();
+var products = await sieveProcessor. Apply(sieveModel, query).ToListAsync();
+var settings = new JsonSerializerSettings
+{
+};
+PreserveReferences Handling = PreserveReferences Handling.Objects, Formatting = Formatting.Indented
+string json = JsonConvert.SerializeObject(products, settings); return ok(json);
+}
+
+Как видим, здесь метод Get, для получения списка продуктов, поддерживающий фильтрацию и сортировку, требующий SieveModel в качестве параметра, а перед ним атрибут [FromQuery], который указывает, что параметр метода должен быть привязан из строки запроса (параметры URL). К примеру, запустив проект, в адресной строке можно перейти по адресу:
+https://localhost:44330/api/Product?Filters=ManufacturerId==2
+Мы получим отформатированную JSON строку:
+
+{
+"$id": "1",
+"ProductArticleNumber": "8025Y5",
+"Name": "Блюдо",
+"Measure": "wr.",
+"Cost": 2000.0000,
+"Description": "блдо декоративное flower 35 Cм Home Philosophy",
+"ProductTypeId": 8,
+"Photo":"",
+"SupplierId": 1,
+"ProductMaxDiscount": 3,
+"ManufacturerId": 2,
+"CurrentDiscount": 3,
+"Status":"",
+"QuantityInStock": 2, "Manufacturer": { "$id": "2",
+"ManufacturerId": 2,
+"Name": "Home Philosophy", "Products": [
+{
+"$ref": "1"
+},
